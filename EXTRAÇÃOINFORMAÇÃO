@@ -1,0 +1,79 @@
+import json
+import re
+from faker import Faker
+
+# Inicializa o Faker para geração de e-mails fictícios
+fake = Faker()
+
+def extrair_fabricante_e_modelo(titulo):
+    # Defina os nomes dos fabricantes que você deseja extrair
+    fabricantes = ['Cubot', 'Motorola']
+
+    fabricante_encontrado = None
+    modelo_encontrado = None
+
+    for fabricante in fabricantes:
+        # Use regex para encontrar o fabricante no título
+        match = re.search(fabricante, titulo, flags=re.IGNORECASE)
+        if match:
+            fabricante_encontrado = match.group(0)
+            break
+
+    if fabricante_encontrado:
+        # Use regex para encontrar o modelo após o nome do fabricante
+        modelo_match = re.search(f'{fabricante_encontrado}(.*?\\b\\d)', titulo, flags=re.IGNORECASE)
+        if modelo_match:
+            modelo_encontrado = modelo_match.group(1).strip()
+
+    return fabricante_encontrado, modelo_encontrado
+
+# Carregar o arquivo JSON de entrada
+with open('C:\\Users\\kekot\\PycharmProjects\\pythonProject3\\new_2.json', 'r') as arquivo_json:
+    dados_json = json.load(arquivo_json)
+
+# Loop para extrair fabricante e modelo (ATENÇÃO --> ALTERAR, PRECISA ALTERAR ESSA FUNÇÃO VERIFICANDO ARRAY DE FABRICANTES) 
+for i, documento in enumerate(dados_json, 1):
+    # 1. Extração do fabricante e modelo do título
+    fabricante, modelo = extrair_fabricante_e_modelo(documento['title'])
+    documento['Fabricante'] = fabricante
+    documento['Modelo'] = modelo
+
+    # 2. FUNÇÃO PRA INSERIR E-MAIL ALEATORIAMENTE
+    if 'email' not in documento['summary'].lower() and i <= 5:
+        documento['summary'] += f"\nE-mail: {fake.email()}"
+
+    # 3. Modificação de URLs em alguns documentos
+    if 'http://' in documento['summary']:
+        documento['summary'] = documento['summary'].replace('http://', 'https://')
+    elif 'https://' in documento['summary']:
+        documento['summary'] = documento['summary'].replace('https://', 'http://')
+    elif 'www.' in documento['summary']:
+        documento['summary'] = documento['summary'].replace('www.', 'www_')
+
+    # 4. Inverter a data no formato DD/MM/AAAA sem usar bibliotecas externas
+    ano, mes, dia = documento['publication_date'][:10].split('-')
+    data_invertida = f"{dia}-{mes}-{ano}"
+    documento['publication_date'] = data_invertida
+
+    # 5. Extração da URL e E-mail
+    url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', documento['summary'])
+    documento['URL'] = url_match.group(0) if url_match else 'N/I'
+
+    email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', documento['summary'])
+    documento['E-mail'] = email_match.group(0) if email_match else 'N/I'
+
+# Exibir a saída final
+for i, documento in enumerate(dados_json, 1):
+    print(f"\n{i}. Título: {documento['title']}")
+    print(f"   Data invertida: {documento['publication_date']}")
+    print(f"   Fabricante: {documento['Fabricante']}")
+    print(f"   Modelo: {documento['Modelo']}")
+    print(f"   URL: {documento['URL']}")
+    print(f"   E-mail: {documento['E-mail']}")
+    print(f"   Resumo: {documento['summary']}")
+
+# Salvar a saída final em um novo arquivo JSON
+with open('saida_final.json', 'w') as arquivo_saida:
+    json.dump(dados_json, arquivo_saida, indent=2)
+
+print("\nSaída final salva no arquivo 'saida_final.json'.")
