@@ -1,94 +1,104 @@
 import json
 import re
 
-def extrair_fabricante_e_modelo(titulo, fabricantes):
-    fabricante_encontrado = None
-    modelo_encontrado = None
-
-    for fabricante in fabricantes:
-        # Use regex para encontrar o fabricante no título
-        match = re.search(fabricante, titulo, flags=re.IGNORECASE)
-        if match:
-            fabricante_encontrado = match.group(0)
-            break
-
-    if fabricante_encontrado:
-        # Primeira parte: encontrar o modelo após o nome do fabricante
-        modelo_match_1 = re.search(f'{fabricante_encontrado}[^0-9]*(\w+\s*\d{0,2})', titulo, flags=re.IGNORECASE)
-        # Segunda parte: encontrar caracteres "colados" ao modelo, se houver
-        modelo_match_2 = re.search(f'{fabricante_encontrado}[^0-9]*(\w+\s*\d{0,2}\S*)', titulo, flags=re.IGNORECASE)
-
-        if modelo_match_1:
-            modelo_encontrado = modelo_match_1.group(1).strip()
-        elif modelo_match_2:
-            modelo_encontrado = modelo_match_2.group(1).strip()
-
-    return fabricante_encontrado, modelo_encontrado
-
-# Restante do código permanece inalterado...
-
 # Caminho do arquivo de entrada
-caminho_entrada = r'C:\Users\kekot\PycharmProjects\pythonProject3\saida_final.json'
-
+caminho_entrada = r"C:\Users\mayse\OneDrive\Documentos\rii2\corpus"
 # Carregar o arquivo JSON de entrada
 with open(caminho_entrada, 'r', encoding='utf-8') as arquivo_json:
     dados_json = json.load(arquivo_json)
 
+def extrair_fabricante_e_modelo(texto, fabricantes):
+    fabricante_encontrado = None
+    modelo_encontrado = None
+    for fabricante in fabricantes:
+        # Use regex para encontrar o fabricante no texto
+        match = re.search(fabricante, texto, flags=re.IGNORECASE)
+        if match:
+            fabricante_encontrado = match.group(0)
+            # Encontrar o modelo após o nome do fabricante sem considerar outros caracteres no meio
+            modelo_match = re.search(r'[^0-9.,]*(\w+\s*\d{0,2}(?:\.\d+)?)', texto, flags=re.IGNORECASE)
+
+            if modelo_match:
+                modelo_encontrado = modelo_match.group(1).strip()
+            break  # Break the loop once a fabricante is found
+
+    return fabricante_encontrado, modelo_encontrado
+
 # Lista de fabricantes presentes nos documentos
-fabricantes_presentes = {"Motorola", "Cubot", "BKsmartphone", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga", "Huawei"}
+fabricantes_presentes = {"Motorola", "Cubot", "BKsmartphone", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga"}
 
 # Loop para extrair fabricante, modelo e versão do Android
 for i, documento in enumerate(dados_json, 1):
-    # Adicionar o fabricante encontrado na lista
-    fabricante, _ = extrair_fabricante_e_modelo(documento['title'], fabricantes_presentes)
-    if fabricante:
-        fabricantes_presentes.add(fabricante)
+    # 1. Extração do fabricante
+    fabricante_titulo, _ = extrair_fabricante_e_modelo(documento.get('title', ''), fabricantes_presentes)
+    fabricante_sumario, _ = extrair_fabricante_e_modelo(documento.get('summary', ''), fabricantes_presentes)
+    
+    # Escolher o fabricante encontrado (pode ser do título ou do sumário)
+    fabricante = fabricante_titulo or fabricante_sumario
 
-# Loop para extrair fabricante, modelo e versão do Android
-for i, documento in enumerate(dados_json, 1):
-    # 1. Extração do fabricante e modelo do título
-    fabricante, modelo = extrair_fabricante_e_modelo(documento['title'], fabricantes_presentes)
+    # Se o fabricante não for "None", tentar encontrar o modelo
+    if fabricante != "None":
+        # Procurar o modelo após o nome do fabricante no título e no sumário
+        modelo_match_generico = re.search(r'[^0-9.,]*(\w+\s*\d{0,2}(?:\.\d+)?)', f"{documento.get('title', '')} {documento.get('summary', '')}", flags=re.IGNORECASE)
+        modelo = modelo_match_generico.group(1).strip() if modelo_match_generico else "N/A"
+    else:
+        modelo = "N/A"
+
     documento['Fabricante'] = fabricante
     documento['Modelo'] = modelo
-
-    # 2. Modificação de URLs em alguns documentos
-    if 'http://' in documento['summary']:
+    
+    # 3. Modificação de URLs em alguns documentos
+    if 'http://' in documento.get('summary', ''):
         documento['summary'] = documento['summary'].replace('http://', 'https://')
-    elif 'https://' in documento['summary']:
+    elif 'https://' in documento.get('summary', ''):
         documento['summary'] = documento['summary'].replace('https://', 'http://')
-    elif 'www.' in documento['summary']:
+    elif 'www.' in documento.get('summary', ''):
         documento['summary'] = documento['summary'].replace('www.', 'www_')
 
-    # 3. Inverter a data no formato DD/MM/AAAA sem usar bibliotecas externas
-    ano, mes, dia = documento['publication_date'][:10].split('-')
+    # 4. Inverter a data no formato DD/MM/AAAA sem usar bibliotecas externas
+    ano, mes, dia = documento.get('publication_date', '')[:10].split('-')
     data_invertida = f"{dia}-{mes}-{ano}"
     documento['publication_date'] = data_invertida
 
-    # 4. Extração da URL e E-mail
-    url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', documento['summary'])
+    # ...
+
+# 5. Extração da URL e E-mail
+    url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', documento.get('summary', ''))
     documento['URL'] = url_match.group(0) if url_match else 'N/I'
 
-    email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', documento['summary'])
+    email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', documento.get('summary', ''))
     documento['E-mail'] = email_match.group(0) if email_match else 'N/I'
 
-    # 5. Extração da versão do Android
-    versao_android = re.search(r'Android\s*([\d.]+)', documento['summary'], flags=re.IGNORECASE)
-    documento['Versão do Android'] = versao_android.group(1).strip() if versao_android else 'N/I'
 
-# Exibir a saída final
-for i, documento in enumerate(dados_json, 1):
+# 6. Extração da versão do Android
+# 6. Extração da versão do Android do título
+    versao_android_titulo = re.search(r'Android\s*([\d.,]+)', documento.get('title', ''), flags=re.IGNORECASE)
+
+# 7. Extração da versão do Android do sumário
+    versao_android_sumario = re.search(r'Android\s*([\d.,]+)', documento.get('summary', ''), flags=re.IGNORECASE)
+
+# Escolher a versão do Android encontrada (pode ser do título ou do sumário)
+    versao_android = versao_android_titulo.group(1).strip() if versao_android_titulo else 'N/I'
+    if not versao_android or versao_android == 'N/I':
+        versao_android = versao_android_sumario.group(1).strip() if versao_android_sumario else 'N/I'
+
+    documento['Versão do Android'] = versao_android
+
+
+
+    # Exibir a saída final
     print(f"\nOUTPUT (template):")
-    print(f"1. Título: {documento['title']}")
-    print(f"2. Data invertida: {documento['publication_date']}")
-    print(f"3. Fabricante: {documento['Fabricante']}")
-    print(f"4. Modelo: {documento['Modelo']}")
-    print(f"5. Versão do Android: {documento['Versão do Android']}")
-    print(f"6. URL: {documento['URL']}")
-    print(f"7. E-mail: {documento['E-mail']}")
-    print(f"8. Resumo = {documento['summary']}")
+    print(f"1. Título: {documento.get('title', '')}")
+    print(f"2. Data invertida: {documento.get('publication_date', '')}")
+    print(f"3. Fabricante: {documento.get('Fabricante', '')}")
+    print(f"4. Modelo: {documento.get('Modelo', '')}")
+    print(f"5. Versão do Android: {documento.get('Versão do Android', '')}")
+    print(f"6. URL: {documento.get('URL', '')}")
+    print(f"7. E-mail: {documento.get('E-mail', '')}")
+    print(f"8. Resumo = {documento.get('summary', '')}")
 
 # Salvar a saída final em um novo arquivo JSON
-caminho_saida = r'C:\Users\kekot\PycharmProjects\pythonProject3\saida_final_corrigida.json'
+caminho_saida = r"C:\Users\mayse\OneDrive\Documentos\rii2\saida_final"
 with open(caminho_saida, 'w', encoding='utf-8') as arquivo_saida:
     json.dump(dados_json, arquivo_saida, indent=2, ensure_ascii=False)
 
