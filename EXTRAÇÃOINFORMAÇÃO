@@ -1,14 +1,7 @@
 import json
 import re
-from faker import Faker
 
-# Inicializa o Faker para geração de e-mails fictícios
-fake = Faker()
-
-def extrair_fabricante_e_modelo(titulo):
-    # Defina os nomes dos fabricantes que você deseja extrair
-    fabricantes = ['Cubot', 'Motorola']
-
+def extrair_fabricante_e_modelo(titulo, fabricantes):
     fabricante_encontrado = None
     modelo_encontrado = None
 
@@ -20,29 +13,45 @@ def extrair_fabricante_e_modelo(titulo):
             break
 
     if fabricante_encontrado:
-        # Use regex para encontrar o modelo após o nome do fabricante
-        modelo_match = re.search(f'{fabricante_encontrado}(.*?\\b\\d)', titulo, flags=re.IGNORECASE)
-        if modelo_match:
-            modelo_encontrado = modelo_match.group(1).strip()
+        # Primeira parte: encontrar o modelo após o nome do fabricante
+        modelo_match_1 = re.search(f'{fabricante_encontrado}[^0-9]*(\w+\s*\d{0,2})', titulo, flags=re.IGNORECASE)
+        # Segunda parte: encontrar caracteres "colados" ao modelo, se houver
+        modelo_match_2 = re.search(f'{fabricante_encontrado}[^0-9]*(\w+\s*\d{0,2}\S*)', titulo, flags=re.IGNORECASE)
+
+        if modelo_match_1:
+            modelo_encontrado = modelo_match_1.group(1).strip()
+        elif modelo_match_2:
+            modelo_encontrado = modelo_match_2.group(1).strip()
 
     return fabricante_encontrado, modelo_encontrado
 
+# Restante do código permanece inalterado...
+
+# Caminho do arquivo de entrada
+caminho_entrada = r'C:\Users\kekot\PycharmProjects\pythonProject3\saida_final.json'
+
 # Carregar o arquivo JSON de entrada
-with open('C:\\Users\\kekot\\PycharmProjects\\pythonProject3\\new_2.json', 'r') as arquivo_json:
+with open(caminho_entrada, 'r', encoding='utf-8') as arquivo_json:
     dados_json = json.load(arquivo_json)
 
-# Loop para extrair fabricante e modelo (ATENÇÃO --> ALTERAR, PRECISA ALTERAR ESSA FUNÇÃO VERIFICANDO ARRAY DE FABRICANTES) 
+# Lista de fabricantes presentes nos documentos
+fabricantes_presentes = {"Motorola", "Cubot", "BKsmartphone", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga"}
+
+# Loop para extrair fabricante, modelo e versão do Android
+for i, documento in enumerate(dados_json, 1):
+    # Adicionar o fabricante encontrado na lista
+    fabricante, _ = extrair_fabricante_e_modelo(documento['title'], fabricantes_presentes)
+    if fabricante:
+        fabricantes_presentes.add(fabricante)
+
+# Loop para extrair fabricante, modelo e versão do Android
 for i, documento in enumerate(dados_json, 1):
     # 1. Extração do fabricante e modelo do título
-    fabricante, modelo = extrair_fabricante_e_modelo(documento['title'])
+    fabricante, modelo = extrair_fabricante_e_modelo(documento['title'], fabricantes_presentes)
     documento['Fabricante'] = fabricante
     documento['Modelo'] = modelo
 
-    # 2. FUNÇÃO PRA INSERIR E-MAIL ALEATORIAMENTE
-    if 'email' not in documento['summary'].lower() and i <= 5:
-        documento['summary'] += f"\nE-mail: {fake.email()}"
-
-    # 3. Modificação de URLs em alguns documentos
+    # 2. Modificação de URLs em alguns documentos
     if 'http://' in documento['summary']:
         documento['summary'] = documento['summary'].replace('http://', 'https://')
     elif 'https://' in documento['summary']:
@@ -50,30 +59,37 @@ for i, documento in enumerate(dados_json, 1):
     elif 'www.' in documento['summary']:
         documento['summary'] = documento['summary'].replace('www.', 'www_')
 
-    # 4. Inverter a data no formato DD/MM/AAAA sem usar bibliotecas externas
+    # 3. Inverter a data no formato DD/MM/AAAA sem usar bibliotecas externas
     ano, mes, dia = documento['publication_date'][:10].split('-')
     data_invertida = f"{dia}-{mes}-{ano}"
     documento['publication_date'] = data_invertida
 
-    # 5. Extração da URL e E-mail
+    # 4. Extração da URL e E-mail
     url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', documento['summary'])
     documento['URL'] = url_match.group(0) if url_match else 'N/I'
 
     email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', documento['summary'])
     documento['E-mail'] = email_match.group(0) if email_match else 'N/I'
 
+    # 5. Extração da versão do Android
+    versao_android = re.search(r'Android\s*([\d.]+)', documento['summary'], flags=re.IGNORECASE)
+    documento['Versão do Android'] = versao_android.group(1).strip() if versao_android else 'N/I'
+
 # Exibir a saída final
 for i, documento in enumerate(dados_json, 1):
-    print(f"\n{i}. Título: {documento['title']}")
-    print(f"   Data invertida: {documento['publication_date']}")
-    print(f"   Fabricante: {documento['Fabricante']}")
-    print(f"   Modelo: {documento['Modelo']}")
-    print(f"   URL: {documento['URL']}")
-    print(f"   E-mail: {documento['E-mail']}")
-    print(f"   Resumo: {documento['summary']}")
+    print(f"\nOUTPUT (template):")
+    print(f"1. Título: {documento['title']}")
+    print(f"2. Data invertida: {documento['publication_date']}")
+    print(f"3. Fabricante: {documento['Fabricante']}")
+    print(f"4. Modelo: {documento['Modelo']}")
+    print(f"5. Versão do Android: {documento['Versão do Android']}")
+    print(f"6. URL: {documento['URL']}")
+    print(f"7. E-mail: {documento['E-mail']}")
+    print(f"8. Resumo = {documento['summary']}")
 
 # Salvar a saída final em um novo arquivo JSON
-with open('saida_final.json', 'w') as arquivo_saida:
-    json.dump(dados_json, arquivo_saida, indent=2)
+caminho_saida = r'C:\Users\kekot\PycharmProjects\pythonProject3\saida_final_corrigida.json'
+with open(caminho_saida, 'w', encoding='utf-8') as arquivo_saida:
+    json.dump(dados_json, arquivo_saida, indent=2, ensure_ascii=False)
 
-print("\nSaída final salva no arquivo 'saida_final.json'.")
+print(f"\nSaída final salva no arquivo '{caminho_saida}'.")
