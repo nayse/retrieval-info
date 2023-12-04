@@ -2,10 +2,11 @@ import json
 import re
 
 # Caminho do arquivo de entrada
-caminho_entrada = r"C:\Users\mayse\OneDrive\Documentos\rii2\corpus"
+caminho_entrada = r"C:\Users\kekot\PycharmProjects\pythonProject3\NOVOCORPUS3_output.json"
 # Carregar o arquivo JSON de entrada
 with open(caminho_entrada, 'r', encoding='utf-8') as arquivo_json:
     dados_json = json.load(arquivo_json)
+
 
 def extrair_fabricante_e_modelo(texto, fabricantes):
     fabricante_encontrado = None
@@ -15,38 +16,69 @@ def extrair_fabricante_e_modelo(texto, fabricantes):
         match = re.search(fabricante, texto, flags=re.IGNORECASE)
         if match:
             fabricante_encontrado = match.group(0)
-            # Encontrar o modelo após o nome do fabricante sem considerar outros caracteres no meio
-            modelo_match = re.search(r'[^0-9.,]*(\w+\s*\d{0,2}(?:\.\d+)?)', texto, flags=re.IGNORECASE)
 
-            if modelo_match:
-                modelo_encontrado = modelo_match.group(1).strip()
             break  # Break the loop once a fabricante is found
 
-    return fabricante_encontrado, modelo_encontrado
+    return fabricante_encontrado
+
 
 # Lista de fabricantes presentes nos documentos
-fabricantes_presentes = {"Motorola", "Cubot", "BKsmartphone", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga"}
+fabricantes_presentes = {"Motorola", "Cubot", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga", "Redmi", "Vivo"}
 
 # Loop para extrair fabricante, modelo e versão do Android
 for i, documento in enumerate(dados_json, 1):
     # 1. Extração do fabricante
-    fabricante_titulo, _ = extrair_fabricante_e_modelo(documento.get('title', ''), fabricantes_presentes)
-    fabricante_sumario, _ = extrair_fabricante_e_modelo(documento.get('summary', ''), fabricantes_presentes)
-    
+    fabricante_titulo = extrair_fabricante_e_modelo(documento.get('title', ''), fabricantes_presentes)
+    fabricante_sumario = extrair_fabricante_e_modelo(documento.get('summary', ''), fabricantes_presentes)
+
     # Escolher o fabricante encontrado (pode ser do título ou do sumário)
     fabricante = fabricante_titulo or fabricante_sumario
 
     # Se o fabricante não for "None", tentar encontrar o modelo
-    if fabricante != "None":
-        # Procurar o modelo após o nome do fabricante no título e no sumário
-        modelo_match_generico = re.search(r'[^0-9.,]*(\w+\s*\d{0,2}(?:\.\d+)?)', f"{documento.get('title', '')} {documento.get('summary', '')}", flags=re.IGNORECASE)
-        modelo = modelo_match_generico.group(1).strip() if modelo_match_generico else "N/A"
+    if fabricante and fabricante != "None":
+        fabricante_escapado = re.escape(fabricante)
     else:
-        modelo = "N/A"
+        fabricante_escapado = ''
+
+
+    # Procurar o nome do modelo após o nome do fabricante no título e no sumário
+    nome_modelo_match = re.search(rf'{fabricante_escapado}\s*([^0-9]+)',
+                                  f"{documento.get('title', '')} {documento.get('summary', '')}", flags=re.IGNORECASE)
+    nome_modelo = nome_modelo_match.group(1).strip() if nome_modelo_match else "N/A"
+
+    print((f"nome_modelo2: {nome_modelo}"))
+
+    # Procurar o numeral do modelo após o nome do modelo
+    numeral_modelo_match = re.search(rf'{re.escape(nome_modelo)}\s*([\d]+)',
+                                     f"{documento.get('title', '')} {documento.get('summary', '')}",
+                                     flags=re.IGNORECASE)
+    numeral_modelo = numeral_modelo_match.group(1).strip() if numeral_modelo_match else "N/A"
+
+    print((f"numeral_modelo: {numeral_modelo}"))
+
+    if numeral_modelo != "N/A":
+        # Verificar se a palavra imediatamente anterior a numeral_modelo é "android" (ignorando o caso)
+        anterior_android_match = re.search(rf'\bAndroid\b',
+                                           f"{documento.get('title', '')} {documento.get('summary', '')}",
+                                           flags=re.IGNORECASE)
+        if anterior_android_match:
+            # Se verdadeiro, definir nome_modelo como a primeira e segunda palavra após o nome do fabricante
+            palavras_apos_fabricante_match = re.search(rf'{re.escape(fabricante_escapado)}\s+(\w+)\s+(\w+)',
+                                                       documento.get('title', ''), flags=re.IGNORECASE)
+            nome_modelo = f"{palavras_apos_fabricante_match.group(1).strip()} {palavras_apos_fabricante_match.group(2).strip()}" if palavras_apos_fabricante_match else "N/A"
+
+            # Combinar o nome e o numeral do modelo
+            modelo = f"{nome_modelo}"
+        else:
+            # Se não for "android", use a lógica original
+            modelo = f"{nome_modelo} {numeral_modelo}"
+    else:
+        # Se o numeral_modelo não for "N/A", use a lógica original
+        modelo = f"{nome_modelo} {numeral_modelo}"
 
     documento['Fabricante'] = fabricante
     documento['Modelo'] = modelo
-    
+
     # 3. Modificação de URLs em alguns documentos
     if 'http://' in documento.get('summary', ''):
         documento['summary'] = documento['summary'].replace('http://', 'https://')
@@ -60,31 +92,26 @@ for i, documento in enumerate(dados_json, 1):
     data_invertida = f"{dia}-{mes}-{ano}"
     documento['publication_date'] = data_invertida
 
-    # ...
-
-# 5. Extração da URL e E-mail
-    url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', documento.get('summary', ''))
+    # 5. Extração da URL e E-mail
+    url_match = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
+                          documento.get('summary', ''))
     documento['URL'] = url_match.group(0) if url_match else 'N/I'
 
     email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', documento.get('summary', ''))
     documento['E-mail'] = email_match.group(0) if email_match else 'N/I'
 
-
-# 6. Extração da versão do Android
-# 6. Extração da versão do Android do título
+    # 6. Extração da versão do Android do título
     versao_android_titulo = re.search(r'Android\s*([\d.,]+)', documento.get('title', ''), flags=re.IGNORECASE)
 
-# 7. Extração da versão do Android do sumário
+    # 7. Extração da versão do Android do sumário
     versao_android_sumario = re.search(r'Android\s*([\d.,]+)', documento.get('summary', ''), flags=re.IGNORECASE)
 
-# Escolher a versão do Android encontrada (pode ser do título ou do sumário)
+    # Escolher a versão do Android encontrada (pode ser do título ou do sumário)
     versao_android = versao_android_titulo.group(1).strip() if versao_android_titulo else 'N/I'
     if not versao_android or versao_android == 'N/I':
         versao_android = versao_android_sumario.group(1).strip() if versao_android_sumario else 'N/I'
 
     documento['Versão do Android'] = versao_android
-
-
 
     # Exibir a saída final
     print(f"\nOUTPUT (template):")
@@ -98,7 +125,7 @@ for i, documento in enumerate(dados_json, 1):
     print(f"8. Resumo = {documento.get('summary', '')}")
 
 # Salvar a saída final em um novo arquivo JSON
-caminho_saida = r"C:\Users\mayse\OneDrive\Documentos\rii2\saida_final"
+caminho_saida = r"C:\Users\kekot\PycharmProjects\pythonProject3\saida_novoteste.json"
 with open(caminho_saida, 'w', encoding='utf-8') as arquivo_saida:
     json.dump(dados_json, arquivo_saida, indent=2, ensure_ascii=False)
 
