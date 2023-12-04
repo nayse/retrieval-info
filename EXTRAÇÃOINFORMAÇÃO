@@ -8,73 +8,59 @@ with open(caminho_entrada, 'r', encoding='utf-8') as arquivo_json:
     dados_json = json.load(arquivo_json)
 
 
-def extrair_fabricante_e_modelo(texto, fabricantes):
+def extrair_fabricante_e_modelo(texto, fabricantes_presentes):
     fabricante_encontrado = None
     modelo_encontrado = None
-    for fabricante in fabricantes:
+
+    for fabricante in fabricantes_presentes:
         # Use regex para encontrar o fabricante no texto
         match = re.search(fabricante, texto, flags=re.IGNORECASE)
         if match:
             fabricante_encontrado = match.group(0)
-
             break  # Break the loop once a fabricante is found
 
-    return fabricante_encontrado
+    if fabricante_encontrado:
+        fabricante_escapado = re.escape(fabricante_encontrado)
 
+        # Procurar o nome do modelo após o nome do fabricante no texto
+        nome_modelo_match = re.search(rf'{fabricante_escapado}\s*([^0-9]+)', texto, flags=re.IGNORECASE)
+        nome_modelo = nome_modelo_match.group(1).strip() if nome_modelo_match else "N/A"
+
+        print((f"nome_modelo2: {nome_modelo}"))
+
+        # Procurar o numeral do modelo após o nome do modelo
+        numeral_modelo_match = re.search(rf'{re.escape(nome_modelo)}\s*([\d]+)', texto, flags=re.IGNORECASE)
+        numeral_modelo = numeral_modelo_match.group(1).strip() if numeral_modelo_match else "N/A"
+
+        print((f"numeral_modelo: {numeral_modelo}"))
+
+        # Adicionar a condição para definir modelo como None se fabricante for None
+        if numeral_modelo != "N/A":
+            # Verificar se a palavra imediatamente anterior a numeral_modelo é "android" (ignorando o caso)
+            anterior_android_match = re.search(rf'\bAndroid\b', texto, flags=re.IGNORECASE)
+            if anterior_android_match:
+                # Se verdadeiro, definir nome_modelo como a primeira e segunda palavra após o nome do fabricante
+                palavras_apos_fabricante_match = re.search(rf'{re.escape(fabricante_escapado)}\s+(\w+)\s+(\w+)', texto, flags=re.IGNORECASE)
+                nome_modelo = f"{palavras_apos_fabricante_match.group(1).strip()} {palavras_apos_fabricante_match.group(2).strip()}" if palavras_apos_fabricante_match else "N/A"
+
+                # Combinar o nome e o numeral do modelo
+                modelo_encontrado = f"{nome_modelo}"
+            else:
+                # Se não for "android", use a lógica original
+                modelo_encontrado = f"{nome_modelo} {numeral_modelo}"
+        else:
+            # Se o numeral_modelo não for "N/A", use a lógica original
+            modelo_encontrado = f"{nome_modelo} {numeral_modelo}"
+
+    return fabricante_encontrado, modelo_encontrado
 
 # Lista de fabricantes presentes nos documentos
 fabricantes_presentes = {"Motorola", "Cubot", "Alcatel", "Xiaomi", "Samsung", "Ulefone", "Jinga", "Redmi", "Vivo"}
 
 # Loop para extrair fabricante, modelo e versão do Android
 for i, documento in enumerate(dados_json, 1):
-    # 1. Extração do fabricante
-    fabricante_titulo = extrair_fabricante_e_modelo(documento.get('title', ''), fabricantes_presentes)
-    fabricante_sumario = extrair_fabricante_e_modelo(documento.get('summary', ''), fabricantes_presentes)
-
-    # Escolher o fabricante encontrado (pode ser do título ou do sumário)
-    fabricante = fabricante_titulo or fabricante_sumario
-
-    # Se o fabricante não for "None", tentar encontrar o modelo
-    if fabricante and fabricante != "None":
-        fabricante_escapado = re.escape(fabricante)
-    else:
-        fabricante_escapado = ''
-
-
-    # Procurar o nome do modelo após o nome do fabricante no título e no sumário
-    nome_modelo_match = re.search(rf'{fabricante_escapado}\s*([^0-9]+)',
-                                  f"{documento.get('title', '')} {documento.get('summary', '')}", flags=re.IGNORECASE)
-    nome_modelo = nome_modelo_match.group(1).strip() if nome_modelo_match else "N/A"
-
-    print((f"nome_modelo2: {nome_modelo}"))
-
-    # Procurar o numeral do modelo após o nome do modelo
-    numeral_modelo_match = re.search(rf'{re.escape(nome_modelo)}\s*([\d]+)',
-                                     f"{documento.get('title', '')} {documento.get('summary', '')}",
-                                     flags=re.IGNORECASE)
-    numeral_modelo = numeral_modelo_match.group(1).strip() if numeral_modelo_match else "N/A"
-
-    print((f"numeral_modelo: {numeral_modelo}"))
-
-    if numeral_modelo != "N/A":
-        # Verificar se a palavra imediatamente anterior a numeral_modelo é "android" (ignorando o caso)
-        anterior_android_match = re.search(rf'\bAndroid\b',
-                                           f"{documento.get('title', '')} {documento.get('summary', '')}",
-                                           flags=re.IGNORECASE)
-        if anterior_android_match:
-            # Se verdadeiro, definir nome_modelo como a primeira e segunda palavra após o nome do fabricante
-            palavras_apos_fabricante_match = re.search(rf'{re.escape(fabricante_escapado)}\s+(\w+)\s+(\w+)',
-                                                       documento.get('title', ''), flags=re.IGNORECASE)
-            nome_modelo = f"{palavras_apos_fabricante_match.group(1).strip()} {palavras_apos_fabricante_match.group(2).strip()}" if palavras_apos_fabricante_match else "N/A"
-
-            # Combinar o nome e o numeral do modelo
-            modelo = f"{nome_modelo}"
-        else:
-            # Se não for "android", use a lógica original
-            modelo = f"{nome_modelo} {numeral_modelo}"
-    else:
-        # Se o numeral_modelo não for "N/A", use a lógica original
-        modelo = f"{nome_modelo} {numeral_modelo}"
+    # 1. Extração do fabricante e modelo
+    fabricante, modelo = extrair_fabricante_e_modelo(f"{documento.get('title', '')} {documento.get('summary', '')}", fabricantes_presentes)
 
     documento['Fabricante'] = fabricante
     documento['Modelo'] = modelo
